@@ -3,6 +3,7 @@
 title: "从golang的反射聊起，讨论'反射'存在的必要性"
 date: 2025-03-10 21:14:00
 tags: golang
+categories: 技术
 
 ---
 

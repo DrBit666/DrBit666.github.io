@@ -1,7 +1,7 @@
 me:
   name: DrBit
   twitter: <twitter_of_author>
-  url: localhost:4000
+  url: https://www.zhangzihe.blog
 
 sw:
   name: simonwillison
