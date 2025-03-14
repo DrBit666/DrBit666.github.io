@@ -1,0 +1,134 @@
+---
+
+title: "我们常说的‘IO多路复用’，到底解决了什么"
+date: 2025-03-12 22:04:00
+tags: Linux
+
+---
+
+
+### 1.从TCP层看，应用交互的步骤是什么样的？
+
+```txt
+假设两台机器上分别有应用A与应用B
+A -> TCP缓冲(A) -> 网络 -> TCP缓冲(B)
+                              ↓
+A <- TCP缓冲(A) <- 网络 <- B(处理完后返回)
+```
+
+### 2.在传统的IO事件处理模型中，被分为阻塞IO和非阻塞IO
+
+* 阻塞IO
+  * 当A发送TCP请求后，阻塞IO事件进程，一直等待直到B返回的TCP请求返回
+* 非阻塞IO
+  * 当A发送TCP请求后，轮询查询IO事件进程，如果B的TCP请求尚未返回，返回ERROR。直到B的TCP请求返回
+* 这样有什么问题？
+  * 不管是阻塞线程(挂起),还是轮询查询，进程都会一直存活，当应用建立的IO过多时，会导致线程过多，系统卡顿甚至崩溃
+
+---
+
+### 3.优化:不对每个IO事件都创建一个进程，而是统一由几个进程去管理IO事件,称之为IO多路复用
+
+**而IO多路复用，又被分为三个模型**
+
+#### 3.1.select 模型
+*select*是Linux中最早推出的多路复用模型，核心代码如下：
+
+```c
+#define __FD_SETSIZE 1024
+//fds_set:用来存储IO事件的fd(file descriptor)事件描述符
+typedef struct {
+unsigned long fds_bits[__FD_SETSIZE / (8 * sizeof(long))];
+} __kernel_fd_set;
+
+struct timeval {
+time_t      tv_sec;         /* seconds */
+suseconds_t tv_usec;        /* microseconds */
+};
+
+//函数声明
+int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+//readfds:需要监听读操作的事件的描述符集合
+//writefds:需要监听写操作的事件的描述符集合
+//exceptfds 需要监听异常操作的事件的描述符集合
+//timeout:超时时间:1-NULL代表没有就绪态的fd就持续等待
+//                :2-0代表不等待,执行完毕过后就直接返回
+//                :3->0时,代表等待>0的时间后返回
+// return int :返回就绪态的fds数量，如果>0 ，轮询fds查询哪些已经就绪，并且执行
+```
+select的出现，解决了**每个IO事件都需要由一个进程管理**的问题，采用几个进程通过select()函数统一管理fds，开创了IO多路复用的先河
+
+可是，尽管现在进程的数量减少了，select()模型还是存在一定问题：
+* 1.fds底层是一个set，且初始化的长度为1024，表示它只能管理一定数量范围内的fds。
+* 2.每次调用select时，需要将*所有fds*从*用户态*加载到*内核态*，这本身就是一笔不小的开销
+* 3.select只返回了就绪的fd的数量，告诉系统是否有就绪的fd,要想真正获取到就绪的fd，还需要遍历fd_set,获取到真正就绪的fd，并执行
+
+#### 3.2.限制解除：poll模型
+poll模型最大的改动,就是将fds_set改为数组，解除了模型能管理的fds上限，核心代码如下：
+```c
+struct pollfd {
+    int fd; /* file descriptor */   //文件描述符
+    short events; /* events to look for */  //需要监听的事件(输入、输出、错误)
+    short revents; /* events returned */   //检测之后的结果
+};
+//						      数组				   fds大小            等待时长
+int poll(struct pollfd *fds, unsigned long nfds, int timeout);
+```
+poll模型在IO多路复用的基础上，将存储的fds_set改为用数组存储，解决了select模型中的问题一，问题二和问题三还是没有解决
+
+#### 3.3.终极方案：epoll模型
+epoll模型的核心由四个函数组成，代码如下：
+```c
+int epoll_create(int size);    //创建epoll实例
+int epoll_create1(int flags);  //创建epoll实例
+//                  操作:增删改 操作的fd    注册的事件类型
+int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);		//向epoll中增加、减少、修改io事件
+				   ep标识        检测的事件类型           返回的最大事件值   阻塞事件
+int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout);  //调用者进程调用该函数等待io事件就绪
+
+struct epoll_event {
+    __uint32_t events;	 //注册的事件类型：输入、输出、错误
+    epoll_data_t data;	//用户自定义数据
+};
+
+union epoll_data {
+ void     *ptr;
+ int       fd;
+ uint32_t  u32;
+ uint64_t  u64;
+};
+typedef union epoll_data  epoll_data_t;
+```
+
+epoll结构对象如下
+```c
+struct eventpoll {
+   /* Wait queue used by sys_epoll_wait() */
+ wait_queue_head_t wq;     //调用epoll_wait阻塞后的进程被阻塞再次，等待唤醒
+
+ /* List of ready file descriptors */
+ struct list_head rdllist;  // 链表：已就绪的fd
+
+    /* RB tree root used to store monitored fd structs */
+ struct rb_root_cached rbr;   //红黑树：调用epollctl添加的fd会被放到这
+}
+```
+
+epoll的流程稍微复杂一些：
+```txt
+epoll_create()->epoll_ctl()添加fd->epoll_wait()等待->fd就绪->
+fd从红黑树移动到链表(准备态->就绪态)->进程从链表中取fd->调用返回
+```
+
+相比于select,poll.epoll为什么高效？
+* 使用红黑树维护fds，插入、查询时间复杂度降低,并且将就绪态的IO事件放到一个统一的链表中存储，解决了问题三
+* 等待态的IO事件与就绪态的IO事件被分开存储，避免每次都全量将fds从用户态拷贝到内核态
+* epoll使用事件驱动，当文件描述符状态改变时，会收到操作系统的回调，然后将就绪态的fd从红黑树取出，放到双向链表中，当用户调用epoll_wait()时，直接从双向链表中取就绪态的fd，无需轮询扫描fds，将时间复杂度降低为O(1)
+
+---
+### 4.总结
+*select*,*poll*,*epoll*三种模型都是同步IO,因为他们需要等待内核中的事件就绪并主动完成数据操作
+区别在于性能：
+* select O(n)时间复杂度，遍历set，且对于fds的处理有上限
+* poll O(n)时间复杂度，遍历数组，无上限但仍需遍历
+* epoll O(1)时间复杂度，由事件驱动，适合高并发

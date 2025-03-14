@@ -1,0 +1,9 @@
+me:
+  name: DrBit
+  twitter: <twitter_of_author>
+  url: localhost:4000
+
+sw:
+  name: simonwillison
+  twitter: <twitter_of_author>
+  url: https://simonwillison.net
