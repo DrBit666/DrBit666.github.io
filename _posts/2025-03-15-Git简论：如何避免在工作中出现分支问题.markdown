@@ -105,11 +105,11 @@ git merge dev
 ```
 
 merge合并操作，会将两只分支的最新快快照(33sbf和8kzis)合并，并与两个分支的最近共同祖先(3zzwc)合并
-![merge3](../../assets/pic/2025-03-15/merge3.png)
+![merge3](assets/pic/2025-03-15/merge3.png)
 
 合并完成后,会将dev分支链表上的提交按时间顺序与主分支链表合并，`然后生成一个新的merge commit`，并将master指向这个新的merge commit
 
-![merge4](../../assets/pic/2025-03-15/merge4.png)
+![merge4](assets/pic/2025-03-15/merge4.png)
 
 
 #### 3.1.2.rebase分支变基
