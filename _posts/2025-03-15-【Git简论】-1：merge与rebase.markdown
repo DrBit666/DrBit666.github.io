@@ -1,6 +1,6 @@
 ---
 
-title: "【Git简论】-1：Git基础与分支合并"
+title: "【Git简论】-1：merge与rebase"
 date: 2025-03-15 13:53:00 +0800
 tags: Git
 categories: 【Git简论】
