@@ -1,8 +1,8 @@
 ---
 
-title: "为什么我的查询没有走索引？详解mysql优化器中的成本计算"
+title: "【MySql】为什么我的查询没有走索引？详解mysql优化器中的成本计算"
 date: 2025-03-25 21:53:00 +0800
-tags: golang
+tags: mysql
 categories: 技术
 
 ---

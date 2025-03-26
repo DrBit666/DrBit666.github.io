@@ -1,6 +1,6 @@
 ---
 
-title: "手把手教你用github_page+jekyll搭建自己的个人博客"
+title: "【博客】手把手教你用github_page+jekyll搭建自己的个人博客"
 date: 2025-03-09 18:01:00 +0800
 tags: blog
 categories: 技术
