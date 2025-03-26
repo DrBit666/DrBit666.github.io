@@ -2,8 +2,8 @@
 
 title: "【Kratos】中间件(1):Trace与Trace中间件"
 date: 2025-03-15 13:53:00 +0800
-tags: golang
-categories: 【框架与工具】
+tags: 框架与工具
+categories: 技术
 
 ---
 

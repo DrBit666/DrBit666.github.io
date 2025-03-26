@@ -3,7 +3,7 @@
 title: "【Git简论】-1：merge与rebase"
 date: 2025-03-15 13:53:00 +0800
 tags: Git
-categories: 【Git简论】
+categories: 技术
 
 ---
 
