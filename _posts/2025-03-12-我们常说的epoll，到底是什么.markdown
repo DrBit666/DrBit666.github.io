@@ -85,7 +85,7 @@ int epoll_create(int size);    //创建epoll实例
 int epoll_create1(int flags);  //创建epoll实例
 //                  操作:增删改 操作的fd    注册的事件类型
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);		//向epoll中增加、减少、修改io事件
-				   ep标识        检测的事件类型           返回的最大事件值   阻塞事件
+//               ep标识        检测的事件类型           返回的最大事件值   阻塞时间
 int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout);  //调用者进程调用该函数等待io事件就绪
 
 struct epoll_event {
@@ -106,7 +106,7 @@ epoll结构对象如下
 ```c
 struct eventpoll {
    /* Wait queue used by sys_epoll_wait() */
- wait_queue_head_t wq;     //调用epoll_wait阻塞后的进程被阻塞再次，等待唤醒
+ wait_queue_head_t wq;     //调用epoll_wait阻塞后的进程被阻塞在此，等待唤醒
 
  /* List of ready file descriptors */
  struct list_head rdllist;  // 链表：已就绪的fd
