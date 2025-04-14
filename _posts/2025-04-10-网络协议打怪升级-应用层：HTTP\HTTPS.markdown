@@ -1,6 +1,6 @@
 ---
 
-title: "网络协议打怪升级-应用层：HTTP、HTTPs"
+title: "网络协议打怪升级-应用层：HTTP、HTTPS"
 date: 2025-04-10 21:22:00 +0800
 tags: 网络
 categories: 技术
