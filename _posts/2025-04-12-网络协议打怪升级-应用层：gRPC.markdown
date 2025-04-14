@@ -68,6 +68,7 @@ gRPC是对RPC理论的一种`工业实现`和`现代化升级`，由google在201
 | 多语言支持 | go,js,java,python... |
 
 * protobuf 语法
+
 ```proto
 syntax = "proto3";   //表示选择proto3语法
 
@@ -75,8 +76,6 @@ message Person {   //结构体，struct
   string name = 1;  //字段编号
   int32 age = 2;
 }
-
-
 ```
 
 * 使用protoc生成代码
