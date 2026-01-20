@@ -16,7 +16,7 @@ timezone: Asia/Shanghai
 
 title: DrBit # the main title
 
-tagline: 可雕琢和支配的唯有本心 # it will display as the subtitle
+tagline: 勇气是人类的赞歌# it will display as the subtitle
 
 description: >- # used by seo meta and the atom feed
   A minimal, responsive and feature-rich Jekyll theme for technical writing.
