@@ -1,0 +1,230 @@
+---
+title: "【MySQL】sql是如何被需求一步一步拖慢的"
+date: 2025-05-28 16:10:00 +0800
+tags: MySQL
+categories: 总结
+---
+
+### 1.起点：一条完全合理、没有任何问题的 SQL
+
+一开始，一个sql特别简单，需求就是一句话：
+
+```
+按时间排序，展示最新内容
+```
+
+SQL如下：
+
+```SQL
+SELECT id, content, update_time
+FROM post
+WHERE status = 1
+ORDER BY update_time DESC
+LIMIT 20;
+```
+
+查询条件简单，排序字段明确，limit很小，update_time有索引。
+
+一条极其合理规范的sql，不存在“优化”的讨论空间。
+
+---
+
+### 2.第一次需求变化：加一个“时间范围”
+
+过了一段时间，业务提了个很常见的需求：
+
+```
+“太老的内容没意义，只查看最近七天的”
+```
+
+SQL变成这样：
+
+```SQL
+SELECT id, content, update_time
+FROM post
+WHERE status = 1
+  AND update_time > NOW() - INTERVAL 7 DAY
+ORDER BY update_time DESC
+LIMIT 20;
+```
+
+到这一步位置，系统仍旧非常健康：
+
+* 条件更收敛了
+* 扫描数据更少
+* 查询成本反而更低
+
+这一阶段，没有任何理由去怀疑这条 SQL。
+
+---
+
+### 3.第二次需求变化：开始引入“互动”概念（拐点出现）
+
+来自一个看起来也很合理的需求：
+
+```
+“最近的不一定最好。”
+“点赞多一点的内容，应该靠前一些。”
+```
+
+这句话非常"产品"，但也开始让事情变得糟糕。
+
+实现方式通常是这样想的：
+```
+那就把点赞表 join 进来，
+按点赞数排一下。
+```
+
+SQL于是变成如下：
+
+```SQL
+SELECT p.id, p.content, p.update_time, COUNT(l.id) AS like_cnt
+FROM post p
+LEFT JOIN post_like l ON l.post_id = p.id
+WHERE p.status = 1
+  AND p.update_time > NOW() - INTERVAL 7 DAY
+GROUP BY p.id
+ORDER BY like_cnt DESC, p.update_time DESC
+LIMIT 20;
+```
+
+此时的SQL状态：
+
+* 数据量不算大。
+* explain看起来也“还行”。
+* 线上暂时没报警。
+
+SQL还能跑，所以在当时，这一步几乎不可能被否掉。
+
+但事后看，这一步已经发生了一个本质变化：
+
+```
+排序依据，从“字段值”变成了“字段值”&&“统计结果”。
+```
+
+---
+
+### 4.为什么这一步很容易被接受？
+
+因为它踩中了几个“工程幻觉”：
+
+* LIMIT 20 给人一种“数据量很小”的错觉
+
+* LEFT JOIN + GROUP BY 在中小数据量下还能扛
+
+* 点赞表当时也不算大
+
+所以看到这条 SQL 时，大概率会想：
+
+```
+“虽然复杂了一点，但也没到不能用的程度吧？”
+```
+
+这正是问题的温床。
+
+---
+
+### 5.第三次需求变化：叠加纬度（质变完成）
+
+此时业务有新想法了：
+
+```
+“光点赞不够。”
+“评论、转发量高的内容，也应该更靠前。”
+```
+
+于是，SQL再次“顺理成章”地演化：
+
+```SQL
+SELECT p.id, p.content,
+       COUNT(DISTINCT l.id) AS like_cnt,
+       COUNT(DISTINCT c.id) AS comment_cnt
+       COUNT(DISTINCT f.id) AS forward_cnt
+FROM post p
+LEFT JOIN post_like l ON l.post_id = p.id
+LEFT JOIN post_comment c ON c.post_id = p.id
+LEFT JOIN post_forward f ON f.post_id = p.id
+WHERE p.status = 1
+  AND p.update_time > NOW() - INTERVAL 7 DAY
+GROUP BY p.id
+ORDER BY (like_cnt + comment_cnt + forward_cnt) DESC
+LIMIT 20;
+```
+
+到这里其实已经很清楚了：
+```
+这条SQL，不实在“查数据”，而是在“算数据”。
+```
+
+问题在于——已经回不去了，如果后续纬度继续叠加，join依旧继续叠加。
+
+---
+
+### 6.为什么这时才开始出问题？
+
+因为这条 SQL 在做的事情是：
+
+* 扫描最近 7 天的所有 post
+* join 点赞表
+* join 评论表
+* join 转发表
+
+对每一条 post：
+
+* 统计点赞数
+* 统计评论数
+* 统计转发数
+
+对所有 post：
+
+* 计算排序权重
+* 再排序
+* 最后，才取前 20 条
+
+也就是说：
+
+```
+哪怕你只要 20 条结果，
+MySQL 也必须“算完再挑”。
+```
+
+在数据量继续增长后：
+
+* join 成本开始失控
+* group by 成本指数级上升
+* order by 彻底不可控
+
+慢查询，就是从这里开始的。
+
+---
+
+### 7.最终的解决方式：把“算”移走
+
+最终的解决方案并不复杂：
+
+* 点赞、评论、转发发生时
+* 增量维护统计数据
+
+维护一张内容统计表：
+
+```SQL
+post_stat (
+  post_id,
+  like_cnt,
+  comment_cnt,
+  forward_cnt,
+  score
+)
+```
+
+score在写入期更新，查询阶段，不join行为表、不group by、不在查询期算排名。
+
+---
+
+### 8.结语
+
+这类问题最危险的地方在于：**没有哪一步是明显错误的**
+它是被一连串“看起来都很合理”的需求，一步一步拖成系统问题的。
+下次在改SQL的时候，多考虑一步：是否越界了？
+这篇文章的目的都达到了
+
