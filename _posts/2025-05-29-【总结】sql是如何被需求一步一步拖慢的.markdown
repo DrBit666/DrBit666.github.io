@@ -1,21 +1,21 @@
 ---
 title: "【MySQL】sql是如何被需求一步一步拖慢的"
 date: 2025-05-28 16:10:00 +0800
-tags: MySQL
-categories: 总结
+tags: 总结
+categories: 技术
 ---
 
 ### 1.起点：一条完全合理、没有任何问题的 SQL
 
 一开始，一个sql特别简单，需求就是一句话：
 
-```
+```txt
 按时间排序，展示最新内容
 ```
 
 SQL如下：
 
-```SQL
+```sql
 SELECT id, content, update_time
 FROM post
 WHERE status = 1
@@ -33,13 +33,13 @@ LIMIT 20;
 
 过了一段时间，业务提了个很常见的需求：
 
-```
+```txt
 “太老的内容没意义，只查看最近七天的”
 ```
 
 SQL变成这样：
 
-```SQL
+```sql
 SELECT id, content, update_time
 FROM post
 WHERE status = 1
@@ -62,7 +62,7 @@ LIMIT 20;
 
 来自一个看起来也很合理的需求：
 
-```
+```txt
 “最近的不一定最好。”
 “点赞多一点的内容，应该靠前一些。”
 ```
@@ -77,7 +77,7 @@ LIMIT 20;
 
 SQL于是变成如下：
 
-```SQL
+```sql
 SELECT p.id, p.content, p.update_time, COUNT(l.id) AS like_cnt
 FROM post p
 LEFT JOIN post_like l ON l.post_id = p.id
@@ -98,7 +98,7 @@ SQL还能跑，所以在当时，这一步几乎不可能被否掉。
 
 但事后看，这一步已经发生了一个本质变化：
 
-```
+```txt
 排序依据，从“字段值”变成了“字段值”&&“统计结果”。
 ```
 
@@ -114,7 +114,7 @@ SQL还能跑，所以在当时，这一步几乎不可能被否掉。
 
 所以看到这条 SQL 时，大概率会想：
 
-```
+```txt
 “虽然复杂了一点，但也没到不能用的程度吧？”
 ```
 
@@ -126,14 +126,14 @@ SQL还能跑，所以在当时，这一步几乎不可能被否掉。
 
 此时业务有新想法了：
 
-```
+```txt
 “光点赞不够。”
 “评论、转发量高的内容，也应该更靠前。”
 ```
 
 于是，SQL再次“顺理成章”地演化：
 
-```SQL
+```sql
 SELECT p.id, p.content,
        COUNT(DISTINCT l.id) AS like_cnt,
        COUNT(DISTINCT c.id) AS comment_cnt
@@ -150,7 +150,8 @@ LIMIT 20;
 ```
 
 到这里其实已经很清楚了：
-```
+
+```txt
 这条SQL，不实在“查数据”，而是在“算数据”。
 ```
 
@@ -181,7 +182,7 @@ LIMIT 20;
 
 也就是说：
 
-```
+```txt
 哪怕你只要 20 条结果，
 MySQL 也必须“算完再挑”。
 ```
@@ -205,7 +206,7 @@ MySQL 也必须“算完再挑”。
 
 维护一张内容统计表：
 
-```SQL
+```sql
 post_stat (
   post_id,
   like_cnt,
